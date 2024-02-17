@@ -1,12 +1,9 @@
 import flask
 from flask import Flask, request, jsonify
 from flask_uploads import UploadSet, configure_uploads, IMAGES
-from PIL import Image
-import numpy as np
-import tensorflow as tf
-from transformers import AutoImageProcessor, SwinForImageClassification
-import torch
 import os
+from preprocess import preprocess_image, predict
+from transformers import SwinForImageClassification
 
 app = flask.Flask(__name__)
 
@@ -17,7 +14,6 @@ ALLOWED_MIMETYPES = ['image/jpeg', 'image/png', 'image/gif']  # Add allowed file
 images = UploadSet('images', IMAGES)
 configure_uploads(app, images)
 
-image_processor = AutoImageProcessor.from_pretrained("Libidrave/CartoonOrNotv2")
 model = SwinForImageClassification.from_pretrained("Libidrave/CartoonOrNotv2")
 
 @app.route("/")
@@ -47,17 +43,8 @@ def predict_image():
 
         # Process and predict using saved image
         img_path = os.path.join(app.config['UPLOADED_IMAGES_DEST'], filename)
-        image = Image.open(img_path)
-        image = image.resize((224, 224))
-        img_array = tf.keras.utils.img_to_array(image)
-
-        inputs = image_processor(img_array, return_tensors="pt")
-
-        with torch.no_grad():
-            logits = model(**inputs).logits
-
-        predicted_label = torch.argmax(logits, dim=1).item()
-        probabilities = torch.softmax(logits, dim=1)
+        inputs = preprocess_image(img_path)
+        predicted_label, probabilities = predict(model, inputs)
 
         # Return informative response with prediction accuracy and image URL
         return jsonify({
